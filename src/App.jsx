@@ -1,32 +1,54 @@
+import React, { useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import AuthProvider from './contexts/AuthContext'
 import AuthCallback from './pages/AuthCallback'
 import Login from './pages/Login'
-import StepOne from './pages/Onboarding/StepOne'
-import Regular from './pages/Onboarding/Regular'
-import Preferences from './pages/Onboarding/Preferences'
-import Resolved from './pages/Onboarding/Resolved'
-import Resolve from './pages/Onboarding/Resolve'
-import Preview from './pages/Onboarding/Preview'
+import Onboarding from './pages/Onboarding'
 import Home from './pages/Home'
-import Settings from './pages/Settings'
-import UniHub from './pages/UniHub'
+import Friends from './pages/Friends'
+import Groups from './pages/Groups'
+import Spending from './pages/Spending'
+import Profile from './pages/Profile'
+import Splash from './components/Splash'
 import { ProtectedRoute, OnboardingGuard, AuthGuard } from './components/RouteGuard'
 
 function App() {
+  const [showSplash, setShowSplash] = useState(true)
+
+  if (showSplash) {
+    return <Splash onFinish={() => setShowSplash(false)} />
+  }
+
   return (
     <AuthProvider>
       <Routes>
-        {/* Root route - redirect to login */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        {/* Root route - redirect to home (Route guards will route properly) */}
+        <Route path="/" element={<Navigate to="/home" replace />} />
 
         {/* Supabase OAuth callback route */}
         <Route path="/auth/callback" element={<AuthCallback />} />
 
-        {/* Login route - accessible when not authenticated */}
-        <Route path="/login" element={<Login />} />
+        {/* Login route - protected from authenticated users */}
+        <Route
+          path="/login"
+          element={
+            <AuthGuard>
+              <Login />
+            </AuthGuard>
+          }
+        />
 
-        {/* Home route - protected, requires auth and data */}
+        {/* Onboarding route - requires authenticated but incomplete profile */}
+        <Route
+          path="/onboarding"
+          element={
+            <OnboardingGuard>
+              <Onboarding />
+            </OnboardingGuard>
+          }
+        />
+
+        {/* Main core pages - require authenticated & complete profile */}
         <Route
           path="/home"
           element={
@@ -37,72 +59,43 @@ function App() {
         />
 
         <Route
-          path="/stepone"
+          path="/friends"
           element={
-            <OnboardingGuard>
-              <StepOne />
-            </OnboardingGuard>
-          }
-        />
-        <Route
-          path="/regular"
-          element={
-            <OnboardingGuard>
-              <Regular />
-            </OnboardingGuard>
+            <ProtectedRoute>
+              <Friends />
+            </ProtectedRoute>
           }
         />
 
         <Route
-          path="/preferences"
+          path="/groups"
           element={
-            <OnboardingGuard>
-              <Preferences />
-            </OnboardingGuard>
-          }
-        />
-        <Route
-          path="/resolved"
-          element={
-            <OnboardingGuard>
-              <Resolved />
-            </OnboardingGuard>
-          }
-        />
-        <Route
-          path="/resolve"
-          element={
-            <OnboardingGuard>
-              <Resolve />
-            </OnboardingGuard>
-          }
-        />
-        <Route
-          path="/preview"
-          element={
-            <OnboardingGuard>
-              <Preview />
-            </OnboardingGuard>
+            <ProtectedRoute>
+              <Groups />
+            </ProtectedRoute>
           }
         />
 
-        {/* Settings route - requires authentication */}
         <Route
-          path="/settings"
+          path="/spending"
           element={
-            <AuthGuard>
-              <Settings />
-            </AuthGuard>
+            <ProtectedRoute>
+              <Spending />
+            </ProtectedRoute>
           }
         />
+
         <Route
-          path="/unihub"
+          path="/profile"
           element={
-            <AuthGuard>
-              <UniHub />
-            </AuthGuard>
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
           }
         />
+
+        {/* Catch-all fallback */}
+        <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>
     </AuthProvider>
   )

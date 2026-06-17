@@ -24,6 +24,8 @@
   --font-product-sans: 'Product Sans', sans-serif;
   --color-accent: #a098ff;
   --font-figtree: 'Figtree', sans-serif;
+  --color-neutral-850: #202020;
+  --color-neutral-350: #acacac;
 }
 
 /* Apply Product Sans globally to all elements */

@@ -4,12 +4,45 @@ import { AuthContext } from '../hooks/useAuth'
 
 export default function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
+  const [profile, setProfile] = useState(null)
+  const [wallet, setWallet] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  const clearLocalData = () => {
-    localStorage.removeItem('timetableData')
-    localStorage.removeItem('onboardingMode')
-    localStorage.removeItem('syncStatus')
+  const fetchProfile = async (userId) => {
+    if (!userId) {
+      setProfile(null)
+      setWallet(null)
+      return
+    }
+    try {
+      // Fetch profile
+      const { data: profData, error: profError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle()
+
+      if (profError) {
+        console.error('Error fetching profile:', profError)
+      } else {
+        setProfile(profData)
+      }
+
+      // Fetch wallet
+      const { data: walletData, error: walletError } = await supabase
+        .from('wallets')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      if (walletError) {
+        console.error('Error fetching wallet:', walletError)
+      } else {
+        setWallet(walletData)
+      }
+    } catch (err) {
+      console.error('Error in fetchProfile:', err)
+    }
   }
 
   useEffect(() => {
@@ -18,8 +51,14 @@ export default function AuthProvider({ children }) {
         data: { session },
         error,
       } = await supabase.auth.getSession()
-      if (!error) {
-        setUser(session?.user || null)
+      
+      if (!error && session?.user) {
+        setUser(session.user)
+        await fetchProfile(session.user.id)
+      } else {
+        setUser(null)
+        setProfile(null)
+        setWallet(null)
       }
       setLoading(false)
     }
@@ -30,15 +69,15 @@ export default function AuthProvider({ children }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT') {
-        clearLocalData()
-      }
-      
-      if (event === 'SIGNED_IN') {
-        // Keep loading state for a moment to allow data sync
+        setUser(null)
+        setProfile(null)
+        setWallet(null)
+        setLoading(false)
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         setUser(session?.user || null)
-        setTimeout(() => setLoading(false), 100)
-      } else {
-        setUser(session?.user || null)
+        if (session?.user) {
+          await fetchProfile(session.user.id)
+        }
         setLoading(false)
       }
     })
@@ -47,26 +86,41 @@ export default function AuthProvider({ children }) {
   }, [])
 
   const signInWithGoogle = async () => {
-    setLoading(true) // Set loading state during sign-in process
+    setLoading(true)
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
-        queryParams: {
-          access_type: 'offline', // enables refresh token
-          prompt: 'consent', // ensures Google issues a refresh token
-        },
       },
     })
-    
-    // Note: loading will be set to false by the auth state change listener
+    return { data, error }
+  }
+
+  const signInWithEmail = async (email, password) => {
+    setLoading(true)
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+    setLoading(false)
+    return { data, error }
+  }
+
+  const signUpWithEmail = async (email, password) => {
+    setLoading(true)
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+    })
+    setLoading(false)
     return { data, error }
   }
 
   const signOut = async () => {
     try {
-      clearLocalData()
       setUser(null)
+      setProfile(null)
+      setWallet(null)
       const { error } = await supabase.auth.signOut()
       if (error) throw error
       return { success: true }
@@ -78,9 +132,14 @@ export default function AuthProvider({ children }) {
 
   const value = {
     user,
+    profile,
+    wallet,
     loading,
     signInWithGoogle,
+    signInWithEmail,
+    signUpWithEmail,
     signOut,
+    fetchProfile,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

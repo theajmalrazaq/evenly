@@ -1,11 +1,10 @@
-// ...existing code...
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-// ...existing code...
 import LoadingPulseOverlay from './Loading'
 
-export function AuthGuard({ children }) {
-  const { user, loading } = useAuth()
+export function ProtectedRoute({ children }) {
+  const { user, profile, loading } = useAuth()
+
   if (loading) {
     return <LoadingPulseOverlay />
   }
@@ -14,40 +13,45 @@ export function AuthGuard({ children }) {
     return <Navigate to="/login" replace />
   }
 
-  return children
-}
+  if (!profile || !profile.onboarding_completed) {
+    return <Navigate to="/onboarding" replace />
+  }
 
-export function ProtectedRoute({ children }) {
-  const { user, loading: authLoading } = useAuth()
-  // ...existing code...
-
-  if (authLoading) {
-    return <LoadingPulseOverlay />
-  }
-  if (!user) {
-    return <Navigate to="/login" replace />
-  }
-  const localTimetable = localStorage.getItem('timetableData')
-  const localOnboarding = localStorage.getItem('onboardingMode')
-  if (!localTimetable || !localOnboarding) {
-    return <Navigate to="/stepone" replace />
-  }
   return children
 }
 
 export function OnboardingGuard({ children }) {
-  const { user, loading: authLoading } = useAuth()
-  // ...existing code...
-  if (authLoading) {
+  const { user, profile, loading } = useAuth()
+
+  if (loading) {
     return <LoadingPulseOverlay />
   }
+
   if (!user) {
     return <Navigate to="/login" replace />
   }
-  const localTimetable = localStorage.getItem('timetableData')
-  const localOnboarding = localStorage.getItem('onboardingMode')
-  if (localTimetable && localOnboarding) {
+
+  if (profile && profile.onboarding_completed) {
     return <Navigate to="/home" replace />
   }
+
+  return children
+}
+
+export function AuthGuard({ children }) {
+  const { user, profile, loading } = useAuth()
+
+  if (loading) {
+    return <LoadingPulseOverlay />
+  }
+
+  if (user) {
+    if (profile && profile.onboarding_completed) {
+      return <Navigate to="/home" replace />
+    } else {
+      return <Navigate to="/onboarding" replace />
+    }
+  }
+
   return children
 }

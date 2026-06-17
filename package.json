@@ -15,6 +15,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.57.2",
     "@tailwindcss/vite": "^4.1.12",
+    "cfdone": ".",
     "grok-sdk": "0.0.1-security",
     "groq-sdk": "^0.32.0",
     "lucide-react": "^0.542.0",

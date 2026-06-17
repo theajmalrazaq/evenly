@@ -44,9 +44,9 @@ export default defineConfig(() => {
           '/android-chrome-512x512.png',
         ],
         manifest: {
-          name: 'CFD ONE',
-          short_name: 'CFD ONE',
-          description: 'A modern timetable app for FAST University students',
+          name: 'evenly',
+          short_name: 'evenly',
+          description: 'A social finance splitwise-style PWA',
           start_url: '/',
           scope: '/',
           display: 'standalone',
