@@ -21,7 +21,7 @@ export default function Splash({ onFinish }) {
 
   return (
     <div
-      className={`fixed inset-0 bg-black z-50 flex flex-col justify-center items-center transition-all duration-300 ${
+      className={`fixed inset-0 bg-bg-app z-50 flex flex-col justify-center items-center transition-all duration-300 ${
         fade ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100'
       }`}
     >
@@ -38,12 +38,12 @@ export default function Splash({ onFinish }) {
         <h1 className="text-4xl font-black tracking-tight mt-4 grad animate-pulse">
           evenly
         </h1>
-        <p className="text-sm text-neutral-400 font-medium tracking-wide">
+        <p className="text-sm text-text-secondary font-medium tracking-wide">
           Finance, split and settled.
         </p>
 
         {/* Loading Progress Bar */}
-        <div className="w-40 h-1 bg-neutral-900 rounded-full overflow-hidden mt-6">
+        <div className="w-40 h-1 bg-bg-card-inner rounded-full overflow-hidden mt-6">
           <div className="h-full bg-gradient-to-r from-accent to-[#7c6fd6] rounded-full animate-shine" style={{ width: '100%', backgroundSize: '200% 200%' }}></div>
         </div>
       </div>

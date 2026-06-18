@@ -20,12 +20,55 @@
     url(https://fonts.gstatic.com/s/productsans/v5/HYvgU2fE2nRJvZ5JFAumwegdm0LZdjqr5-oayXSOefg.woff2)
       format('woff2');
 }
+:root {
+  --bg-app: #f4f4f6;
+  --bg-card: rgba(255, 255, 255, 0.85);
+  --bg-card-inner: rgba(240, 240, 245, 0.7);
+  --text-primary: #1c1c1e;
+  --text-secondary: #8e8e93;
+  --border-color: rgba(0, 0, 0, 0.08);
+  --border-color-inner: rgba(0, 0, 0, 0.12);
+  --bg-input: #ffffff;
+  --border-input: #d1d1d6;
+  --text-grad: linear-gradient(135deg, #1c1c1e, #7c6fd6, #a098ff, #7c6fd6, #1c1c1e);
+}
+
+.dark {
+  --bg-app: #000000;
+  --bg-card: rgba(23, 23, 23, 0.4);
+  --bg-card-inner: rgba(0, 0, 0, 0.4);
+  --text-primary: #ffffff;
+  --text-secondary: #a3a3a3;
+  --border-color: rgba(38, 38, 38, 0.8);
+  --border-color-inner: rgba(38, 38, 38, 0.6);
+  --bg-input: #000000;
+  --border-input: #202020;
+  --text-grad: linear-gradient(135deg, #fff, #b3adff, #a098ff, #7c6fd6, #a098ff, #fff);
+}
+
 @theme {
   --font-product-sans: 'Product Sans', sans-serif;
   --color-accent: #a098ff;
   --font-figtree: 'Figtree', sans-serif;
   --color-neutral-850: #202020;
   --color-neutral-350: #acacac;
+
+  /* Theme color mappings */
+  --color-bg-app: var(--bg-app);
+  --color-bg-card: var(--bg-card);
+  --color-bg-card-inner: var(--bg-card-inner);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-border-primary: var(--border-color);
+  --color-border-inner: var(--border-color-inner);
+  --color-bg-input: var(--bg-input);
+  --color-border-input: var(--border-input);
+}
+
+html {
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Apply Product Sans globally to all elements */
@@ -76,14 +119,27 @@ button {
 h1,
 h2,
 .grad {
-  color: #fff;
   margin-bottom: 0.2rem;
   letter-spacing: -1px;
-  background: linear-gradient(135deg, #fff, #b3adff, #a098ff, #7c6fd6, #a098ff, #fff);
+  background: var(--text-grad);
   background-size: auto;
   background-clip: border-box;
   background-size: 200% 200%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+@keyframes growBar {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+rect {
+  transform-origin: bottom;
+  animation: growBar 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

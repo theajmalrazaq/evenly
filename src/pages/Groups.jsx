@@ -122,7 +122,6 @@ export default function Groups() {
       const memberProfiles = members.map(m => m.profiles)
       setGroupMembers(memberProfiles)
 
-      // Default the payer of new expenses to the logged in user
       setExpensePayerId(user.id)
 
       // 3. Fetch group expenses
@@ -179,7 +178,6 @@ export default function Groups() {
     setError(null)
 
     try {
-      // 1. Insert Group
       const { data: group, error: gError } = await supabase
         .from('groups')
         .insert({
@@ -191,7 +189,6 @@ export default function Groups() {
 
       if (gError) throw gError
 
-      // 2. Add members: logged in user + selected friends
       const memberInserts = [user.id, ...selectedFriends].map(uId => ({
         group_id: group.id,
         user_id: uId
@@ -208,7 +205,6 @@ export default function Groups() {
       setGroupName('')
       setSelectedFriends([])
       
-      // Refresh groups list
       await fetchInitialData()
     } catch (err) {
       console.error(err)
@@ -254,7 +250,7 @@ export default function Groups() {
         expense_id: exp.id,
         user_id: m.id,
         share: Number(share.toFixed(2)),
-        status: m.id === expensePayerId ? 'settled' : 'pending' // payer has automatically settled their share
+        status: m.id === expensePayerId ? 'settled' : 'pending'
       }))
 
       const { error: sError } = await supabase
@@ -268,7 +264,6 @@ export default function Groups() {
       setExpenseTitle('')
       setExpenseAmount('')
       
-      // Refresh details
       await fetchGroupDetails(selectedGroupId)
     } catch (err) {
       console.error(err)
@@ -286,11 +281,6 @@ export default function Groups() {
       setLoading(true)
       setError(null)
 
-      // A settlement is represented as a group expense where:
-      // payer_id = the person paying (debtor)
-      // amount = payment amount
-      // title = "Settlement: A to B"
-      // is_settlement = true
       const { data: exp, error: eError } = await supabase
         .from('group_expenses')
         .insert({
@@ -305,14 +295,13 @@ export default function Groups() {
 
       if (eError) throw eError
 
-      // Create a split where 100% of the share goes to the receiver (toUserId)
       const { error: sError } = await supabase
         .from('group_expense_splits')
         .insert({
           expense_id: exp.id,
           user_id: toUserId,
           share: amountToPay,
-          status: 'settled' // Settled immediately
+          status: 'settled'
         })
 
       if (sError) throw sError
@@ -342,7 +331,6 @@ export default function Groups() {
 
     const memberBalances = {}
     
-    // Initialize balances for each member
     groupMembers.forEach(m => {
       memberBalances[m.id] = {
         profile: m,
@@ -352,29 +340,23 @@ export default function Groups() {
       }
     })
 
-    // Sum paid amounts (excluding settlement payments, wait - settlements should affect balances!)
-    // If B paid A $10, B's paid amount increases by $10, and A's share increases by $10.
-    // Yes! That works perfectly if we just treat settlements like normal expenses in terms of math!
     groupExpenses.forEach(exp => {
       if (memberBalances[exp.payer_id]) {
         memberBalances[exp.payer_id].paid += Number(exp.amount)
       }
     })
 
-    // Sum shares
     groupSplits.forEach(split => {
       if (memberBalances[split.user_id]) {
         memberBalances[split.user_id].share += Number(split.share)
       }
     })
 
-    // Calculate net = paid - share
     Object.keys(memberBalances).forEach(id => {
       const mb = memberBalances[id]
       mb.net = Number((mb.paid - mb.share).toFixed(2))
     })
 
-    // Compute settlements suggestions using Splitwise-style greedy algorithm
     const debtors = []
     const creditors = []
 
@@ -387,7 +369,6 @@ export default function Groups() {
       }
     })
 
-    // Sort: debtors ascending (most negative first), creditors descending (most positive first)
     debtors.sort((a, b) => a.net - b.net)
     creditors.sort((a, b) => b.net - a.net)
 
@@ -395,7 +376,6 @@ export default function Groups() {
     let dIdx = 0
     let cIdx = 0
 
-    // Clone nets to mutate in matching loop
     const dNets = debtors.map(d => ({ ...d }))
     const cNets = creditors.map(c => ({ ...c }))
 
@@ -416,7 +396,6 @@ export default function Groups() {
         amount: settleVal
       })
 
-      // Update remaining amounts
       debtor.net += settleVal
       creditor.net -= settleVal
 
@@ -436,19 +415,17 @@ export default function Groups() {
 
       {loading && <LoadingPulseOverlay />}
 
-      <div className="min-h-screen bg-black text-white px-4 py-8 pb-28 font-figtree">
-        <div className="max-w-7xl mx-auto">
+      <div className="min-h-screen bg-bg-app text-text-primary px-4 py-6 pb-28 font-figtree transition-colors duration-300">
+        <div className="max-w-md mx-auto space-y-6">
           
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-            
-            {/* Left Panel: Group List */}
-            <div className={`lg:col-span-1 bg-neutral-900/15 border border-neutral-800/60 rounded-3xl p-5 ${
-              selectedGroupId !== null ? 'hidden lg:block' : 'block'
-            }`}>
+          {/* Left Panel: Group List */}
+          <div className={`bg-bg-card border border-border-primary rounded-3xl p-5 shadow-sm ${
+            selectedGroupId !== null ? 'hidden' : 'block'
+          }`}>
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h1 className="text-xl font-black text-white grad">Groups</h1>
-                  <p className="text-[10px] text-neutral-400">Manage shared bills and splits</p>
+                  <h1 className="text-xl font-black text-text-primary grad">Groups</h1>
+                  <p className="text-[10px] text-text-secondary">Manage shared bills and splits</p>
                 </div>
                 <button
                   onClick={() => setIsCreateOpen(true)}
@@ -460,9 +437,9 @@ export default function Groups() {
 
               <div className="flex flex-col gap-3">
                 {groups.length === 0 ? (
-                  <div className="bg-neutral-900/20 border border-dashed border-neutral-800 rounded-2xl p-6 text-center">
-                    <Layers className="w-6 h-6 text-neutral-600 mb-2 mx-auto" />
-                    <p className="text-xs font-semibold text-neutral-500">No groups yet</p>
+                  <div className="bg-bg-card border border-dashed border-border-primary rounded-2xl p-6 text-center">
+                    <Layers className="w-6 h-6 text-text-secondary/60 mb-2 mx-auto" />
+                    <p className="text-xs font-semibold text-text-secondary">No groups yet</p>
                     <button
                       onClick={() => setIsCreateOpen(true)}
                       className="mt-2 text-xs font-bold text-accent hover:underline bg-transparent border-0 cursor-pointer"
@@ -478,16 +455,16 @@ export default function Groups() {
                       className={`flex items-center justify-between p-4 rounded-xl cursor-pointer border transition ${
                         selectedGroupId === g.id
                           ? 'bg-accent/10 border-accent/40'
-                          : 'bg-black/40 border-neutral-800 hover:border-neutral-700/60'
+                          : 'bg-bg-card-inner border-border-primary hover:border-accent/40'
                       }`}
                     >
                       <div className="flex items-center gap-3 overflow-hidden">
                         <div className="w-8 h-8 rounded-lg bg-accent/15 flex items-center justify-center text-accent flex-shrink-0">
                           <Users className="w-4 h-4" />
                         </div>
-                        <p className="text-xs font-bold truncate text-white leading-tight">{g.name}</p>
+                        <p className="text-xs font-bold truncate text-text-primary leading-tight">{g.name}</p>
                       </div>
-                      <ChevronRight className="w-3.5 h-3.5 text-neutral-500 flex-shrink-0" />
+                      <ChevronRight className="w-3.5 h-3.5 text-text-secondary flex-shrink-0" />
                     </div>
                   ))
                 )}
@@ -495,53 +472,49 @@ export default function Groups() {
             </div>
 
             {/* Right Panel: Group Details */}
-            <div className={`lg:col-span-2 ${
-              selectedGroupId === null ? 'hidden lg:block' : 'block'
-            }`}>
+            <div className={selectedGroupId === null ? 'hidden' : 'block'}>
               {selectedGroupId === null ? (
-                /* Empty State on Desktop */
-                <div className="bg-neutral-900/10 border border-dashed border-neutral-800/80 rounded-3xl p-16 text-center flex flex-col items-center justify-center min-h-[300px]">
-                  <Layers className="w-12 h-12 text-neutral-700 mb-3" />
-                  <h3 className="text-sm font-bold text-neutral-400">No Group Selected</h3>
-                  <p className="text-xs text-neutral-500 mt-2 max-w-[240px]">
+                <div className="bg-bg-card border border-dashed border-border-primary rounded-3xl p-16 text-center flex flex-col items-center justify-center min-h-[300px]">
+                  <Layers className="w-12 h-12 text-text-secondary/60 mb-3" />
+                  <h3 className="text-sm font-bold text-text-secondary">No Group Selected</h3>
+                  <p className="text-xs text-text-secondary/80 mt-2 max-w-[240px]">
                     Select a group from the list on the left to view split balances, settlements, and expenses.
                   </p>
                 </div>
               ) : (
-                /* Group details content */
                 <div className="space-y-6">
-                  {/* Back Header (shows Back button on mobile only) */}
+                  {/* Back Header */}
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => {
                         setSelectedGroupId(null)
                         setSelectedGroup(null)
                       }}
-                      className="p-2 bg-neutral-900 border border-neutral-800 rounded-full text-neutral-400 hover:text-white transition lg:hidden cursor-pointer"
+                      className="p-2 bg-bg-card border border-border-primary rounded-full text-text-secondary hover:text-text-primary transition cursor-pointer"
                     >
                       <ArrowLeft className="w-4 h-4" />
                     </button>
                     <div>
-                      <h2 className="text-xl font-bold text-white leading-tight">{selectedGroup?.name}</h2>
-                      <p className="text-[10px] text-neutral-400 font-medium">Split group ({groupMembers.length} members)</p>
+                      <h2 className="text-xl font-bold text-text-primary leading-tight">{selectedGroup?.name}</h2>
+                      <p className="text-xs text-text-secondary font-medium">Split group ({groupMembers.length} members)</p>
                     </div>
                   </div>
 
                   {/* Quick Summary Balance in Group */}
                   {memberBalances[user.id] && (
-                    <div className="bg-neutral-900/30 border border-neutral-800/80 rounded-[1.8rem] p-5">
-                      <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-1">Your Group Status</p>
+                    <div className="bg-bg-card border border-border-primary rounded-[1.8rem] p-5 shadow-sm">
+                      <p className="text-xs font-semibold text-text-secondary mb-1">Your Group Status</p>
                       {memberBalances[user.id].net === 0 ? (
-                        <h1 className="text-2xl font-black text-neutral-400">All Settled Up</h1>
+                        <h1 className="text-2xl font-black text-text-secondary">All Settled Up</h1>
                       ) : memberBalances[user.id].net > 0 ? (
                         <div>
                           <h1 className="text-2xl font-black text-green-400">Owed Rs. {memberBalances[user.id].net}</h1>
-                          <p className="text-[10px] text-neutral-500 mt-0.5">Other group members owe you this total amount</p>
+                          <p className="text-xs text-text-secondary mt-0.5">Other group members owe you this total amount</p>
                         </div>
                       ) : (
                         <div>
                           <h1 className="text-2xl font-black text-red-400">You Owe Rs. {Math.abs(memberBalances[user.id].net)}</h1>
-                          <p className="text-[10px] text-neutral-500 mt-0.5 font-medium">Pay back to settle group balances</p>
+                          <p className="text-xs text-text-secondary mt-0.5 font-medium">Pay back to settle group balances</p>
                         </div>
                       )}
                     </div>
@@ -550,7 +523,7 @@ export default function Groups() {
                   {/* Suggested Settlements Section */}
                   {settlements.length > 0 && (
                     <div>
-                      <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-3 ml-1">Suggested Settlements</h3>
+                      <h3 className="text-sm font-bold text-text-primary mb-3 ml-1">Suggested Settlements</h3>
                       <div className="flex flex-col gap-3">
                         {settlements.map((s, idx) => {
                           const isUserDebtor = s.fromId === user.id
@@ -559,24 +532,24 @@ export default function Groups() {
                           return (
                             <div
                               key={idx}
-                              className="flex items-center justify-between p-4 bg-neutral-900/40 border border-neutral-800/80 rounded-2xl"
+                              className="flex items-center justify-between p-4 bg-bg-card-inner border border-border-primary rounded-2xl"
                             >
                               <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-xs">
                                   💡
                                 </div>
                                 <div>
-                                  <p className="text-xs font-bold text-white">
+                                  <p className="text-xs font-bold text-text-primary">
                                     {s.fromName} owes {s.toName}
                                   </p>
-                                  <p className="text-[10px] text-accent font-semibold">Rs. {s.amount}</p>
+                                  <p className="text-xs text-accent font-semibold">Rs. {s.amount}</p>
                                 </div>
                               </div>
 
                               {(isUserDebtor || isUserCreditor) && (
                                 <button
                                   onClick={() => handleRecordSettlement(s.fromId, s.toId, s.amount, s.fromName, s.toName)}
-                                  className="bg-accent/10 border border-accent/20 text-accent px-3 py-1.5 rounded-xl text-[10px] font-bold hover:bg-accent/20 transition cursor-pointer"
+                                  className="bg-accent/10 border border-accent/20 text-accent px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-accent/20 transition cursor-pointer"
                                 >
                                   Mark Paid
                                 </button>
@@ -600,33 +573,33 @@ export default function Groups() {
 
                   {/* Expenses History */}
                   <div>
-                    <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-4 ml-1">Expenses History</h3>
+                    <h3 className="text-sm font-bold text-text-primary mb-4 ml-1">Expenses History</h3>
                     <div className="flex flex-col gap-3">
                       {groupExpenses.length === 0 ? (
-                        <div className="bg-neutral-900/20 border border-dashed border-neutral-800 rounded-2xl p-6 text-center">
-                          <p className="text-xs text-neutral-500">No expenses split in this group yet</p>
+                        <div className="bg-bg-card border border-dashed border-border-primary rounded-2xl p-6 text-center">
+                          <p className="text-xs text-text-secondary">No expenses split in this group yet</p>
                         </div>
                       ) : (
                         groupExpenses.map(exp => (
                           <div
                             key={exp.id}
-                            className="flex items-center justify-between p-4 bg-neutral-900/40 border border-neutral-800/80 rounded-2xl"
+                            className="flex items-center justify-between p-4 bg-bg-card-inner border border-border-primary rounded-2xl"
                           >
                             <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-xl bg-neutral-800 flex items-center justify-center text-base">
+                              <div className="w-9 h-9 rounded-xl bg-bg-card border border-border-primary flex items-center justify-center text-base shadow-sm">
                                 {exp.is_settlement ? '🤝' : '💸'}
                               </div>
                               <div>
-                                <p className="text-xs font-bold text-white leading-tight">{exp.title}</p>
-                                <p className="text-[10px] text-neutral-400 mt-0.5">
+                                <p className="text-xs font-bold text-text-primary leading-tight">{exp.title}</p>
+                                <p className="text-xs text-text-secondary mt-0.5">
                                   {exp.is_settlement ? '' : `Paid by ${exp.payer?.full_name}`}
                                 </p>
                               </div>
                             </div>
 
                             <div className="text-right">
-                              <p className="text-xs font-extrabold text-white">Rs. {exp.amount}</p>
-                              <p className="text-[8px] text-neutral-500 flex items-center gap-1 justify-end mt-0.5">
+                              <p className="text-xs font-extrabold text-text-primary">Rs. {exp.amount}</p>
+                              <p className="text-xs text-text-secondary flex items-center gap-1 justify-end mt-0.5 font-semibold">
                                 <Calendar className="w-2.5 h-2.5" />
                                 {new Date(exp.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                               </p>
@@ -640,7 +613,6 @@ export default function Groups() {
               )}
             </div>
 
-          </div>
         </div>
       </div>
 
@@ -648,14 +620,14 @@ export default function Groups() {
          CREATE GROUP MODAL
          ======================================================== */}
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-[2rem] p-6 shadow-2xl">
-            <h2 className="text-xl font-black text-white grad mb-1">Create Split Group</h2>
-            <p className="text-xs text-neutral-400 mb-5">Create a group and add friends to split expenses equally.</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-bg-card border border-border-primary rounded-[2rem] p-6 shadow-2xl">
+            <h2 className="text-xl font-black text-text-primary grad mb-1">Create Split Group</h2>
+            <p className="text-xs text-text-secondary mb-5">Create a group and add friends to split expenses equally.</p>
 
             <form onSubmit={handleCreateGroup} className="space-y-4">
               <div>
-                <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-2 ml-1">
+                <label className="block text-xs font-semibold text-text-secondary mb-2 ml-1">
                   Group Name
                 </label>
                 <input
@@ -663,13 +635,13 @@ export default function Groups() {
                   value={groupName}
                   onChange={(e) => setGroupName(e.target.value)}
                   placeholder="e.g. Flatmates, Trips, Dinner Out"
-                  className="w-full bg-black border border-neutral-850 focus:border-accent text-white px-4 py-3 rounded-xl text-sm outline-none"
+                  className="w-full bg-bg-input border border-border-input focus:border-accent text-text-primary px-4 py-3 rounded-xl text-sm outline-none"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-2 ml-1">
+                <label className="block text-xs font-semibold text-text-secondary mb-2 ml-1">
                   Select Friends ({selectedFriends.length} selected)
                 </label>
                 
@@ -685,15 +657,15 @@ export default function Groups() {
                           onClick={() => toggleFriendSelect(f.id)}
                           className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition ${
                             isSelected
-                              ? 'bg-accent/10 border-accent text-white'
-                              : 'bg-black/50 border-neutral-800 text-neutral-300'
+                              ? 'bg-accent/10 border-accent text-text-primary'
+                              : 'bg-bg-card-inner border-border-primary text-text-secondary'
                           }`}
                         >
                           <div className="flex items-center gap-2">
                             <span className="text-xl">{f.avatar_url || '👤'}</span>
                             <div>
                               <p className="text-xs font-bold">{f.full_name}</p>
-                              <p className="text-[9px] opacity-70">@{f.username}</p>
+                              <p className="text-xs opacity-70">@{f.username}</p>
                             </div>
                           </div>
 
@@ -713,7 +685,7 @@ export default function Groups() {
                 <button
                   type="button"
                   onClick={() => setIsCreateOpen(false)}
-                  className="flex-1 bg-neutral-850 text-neutral-300 py-3 rounded-xl text-xs font-bold hover:bg-neutral-800 transition cursor-pointer"
+                  className="flex-1 bg-bg-card-inner border border-border-primary text-text-secondary py-3 rounded-xl text-xs font-bold hover:text-text-primary transition cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -734,16 +706,16 @@ export default function Groups() {
          ADD EXPENSE MODAL
          ======================================================== */}
       {isAddExpenseOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-[2rem] p-6 shadow-2xl">
-            <h2 className="text-xl font-black text-white grad mb-1">Add Group Expense</h2>
-            <p className="text-xs text-neutral-400 mb-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-bg-card border border-border-primary rounded-[2rem] p-6 shadow-2xl">
+            <h2 className="text-xl font-black text-text-primary grad mb-1">Add Group Expense</h2>
+            <p className="text-xs text-text-secondary mb-5">
               Enter expense details. The amount will be split equally among all members.
             </p>
 
             <form onSubmit={handleAddExpense} className="space-y-4">
               <div>
-                <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-2 ml-1">
+                <label className="block text-xs font-semibold text-text-secondary mb-2 ml-1">
                   Expense Title
                 </label>
                 <input
@@ -751,14 +723,14 @@ export default function Groups() {
                   value={expenseTitle}
                   onChange={(e) => setExpenseTitle(e.target.value)}
                   placeholder="Dinner, snacks, taxi ride..."
-                  className="w-full bg-black border border-neutral-850 focus:border-accent text-white px-4 py-3 rounded-xl text-sm outline-none"
+                  className="w-full bg-bg-input border border-border-input focus:border-accent text-text-primary px-4 py-3 rounded-xl text-sm outline-none"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-2 ml-1">
+                  <label className="block text-xs font-semibold text-text-secondary mb-2 ml-1">
                     Amount (Rs.)
                   </label>
                   <input
@@ -767,23 +739,23 @@ export default function Groups() {
                     onChange={(e) => setExpenseAmount(e.target.value)}
                     placeholder="1200"
                     min="1"
-                    className="w-full bg-black border border-neutral-850 focus:border-accent text-white px-4 py-3 rounded-xl text-sm outline-none"
+                    className="w-full bg-bg-input border border-border-input focus:border-accent text-text-primary px-4 py-3 rounded-xl text-sm outline-none"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-2 ml-1">
+                  <label className="block text-xs font-semibold text-text-secondary mb-2 ml-1">
                     Paid By
                   </label>
                   <select
                     value={expensePayerId}
                     onChange={(e) => setExpensePayerId(e.target.value)}
-                    className="w-full bg-black border border-neutral-850 focus:border-accent text-white px-3 py-3 rounded-xl text-sm outline-none cursor-pointer"
+                    className="w-full bg-bg-input border border-border-input focus:border-accent text-text-primary px-3 py-3 rounded-xl text-sm outline-none cursor-pointer"
                     required
                   >
                     {groupMembers.map(m => (
-                      <option key={m.id} value={m.id}>
+                      <option key={m.id} value={m.id} className="bg-bg-input text-text-primary">
                         {m.id === user.id ? 'You' : m.full_name}
                       </option>
                     ))}
@@ -795,7 +767,7 @@ export default function Groups() {
                 <button
                   type="button"
                   onClick={() => setIsAddExpenseOpen(false)}
-                  className="flex-1 bg-neutral-850 text-neutral-300 py-3 rounded-xl text-xs font-bold hover:bg-neutral-800 transition cursor-pointer"
+                  className="flex-1 bg-bg-card-inner border border-border-primary text-text-secondary py-3 rounded-xl text-xs font-bold hover:text-text-primary transition cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -812,7 +784,6 @@ export default function Groups() {
         </div>
       )}
 
-      {/* Floating Bottom Nav */}
       <Navbar currentPage="groups" />
     </>
   )

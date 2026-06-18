@@ -5,7 +5,7 @@ import { supabase } from '../config/supabase'
 import Navbar from '../components/Navbar'
 import Toast from '../components/Toast'
 import LoadingPulseOverlay from '../components/Loading'
-import { Plus, Search, UserPlus, Users, Share2, TrendingDown, ArrowUpRight, ArrowDownLeft, DollarSign, Wallet, Check, Trash2, Calendar, FileText } from 'lucide-react'
+import { Plus, Search, UserPlus, Users, Layers, ArrowUpRight, ArrowDownLeft, Calendar, FileText, Trash2, Wallet, Settings, Landmark, RefreshCw, Send, ArrowRightLeft, Menu } from 'lucide-react'
 
 export default function Home() {
   const { user, profile, signOut } = useAuth()
@@ -38,14 +38,16 @@ export default function Home() {
   const [payWallet, setPayWallet] = useState(null)
   const [settlingDirect, setSettlingDirect] = useState(false)
 
+  // Search filter
+  const [searchFilter, setSearchFilter] = useState('')
+
   // Fetch all dashboard data
   const fetchDashboardData = async () => {
     try {
       setLoading(true)
       setError(null)
 
-      // 1. Fetch Friends (to choose from in direct transactions and display details)
-      // Since friendships are stored as (user_id_1, user_id_2) with user_id_1 < user_id_2
+      // 1. Fetch Friends
       const { data: friendships, error: fError } = await supabase
         .from('friendships')
         .select(`
@@ -75,12 +77,11 @@ export default function Home() {
       if (txError) throw txError
       setRecentTransactions(txs || [])
 
-      // 3. Compute Direct Balances (only pending transactions)
+      // 3. Compute Direct Balances
       const pendingTxs = txs.filter(t => t.status === 'pending')
       let directOwed = 0
       let directOwes = 0
 
-      // Group balances by friend ID
       const friendBalances = {}
       friendsList.forEach(f => {
         friendBalances[f.id] = 0
@@ -93,14 +94,12 @@ export default function Home() {
         }
 
         if (t.user_id === user.id) {
-          // I created it
           if (t.type === 'lent' || t.type === 'paid') {
             friendBalances[friendId] += Number(t.amount)
           } else {
             friendBalances[friendId] -= Number(t.amount)
           }
         } else {
-          // Friend created it
           if (t.type === 'borrowed' || t.type === 'received') {
             friendBalances[friendId] += Number(t.amount)
           } else {
@@ -109,7 +108,6 @@ export default function Home() {
         }
       })
 
-      // Sum direct balances
       Object.keys(friendBalances).forEach(fId => {
         const bal = friendBalances[fId]
         if (bal > 0) {
@@ -119,8 +117,7 @@ export default function Home() {
         }
       })
 
-      // 4. Fetch Group Expenses and Splits to aggregate group balances
-      // Get groups user belongs to
+      // 4. Fetch Group Expenses and Splits
       const { data: memberships, error: mError } = await supabase
         .from('group_members')
         .select('group_id')
@@ -133,7 +130,6 @@ export default function Home() {
       let groupOwes = 0
 
       if (groupIds.length > 0) {
-        // Fetch group expenses paid by user
         const { data: expenses, error: expError } = await supabase
           .from('group_expenses')
           .select('id, amount, payer_id, group_id')
@@ -141,7 +137,6 @@ export default function Home() {
 
         if (expError) throw expError
 
-        // Fetch user's pending splits
         const { data: splits, error: splitError } = await supabase
           .from('group_expense_splits')
           .select('id, share, status, expense:expense_id(group_id, payer_id)')
@@ -150,33 +145,6 @@ export default function Home() {
 
         if (splitError) throw splitError
 
-        // Compute group net balance
-        // We can do it per group
-        groupIds.forEach(gId => {
-          const paidInGroup = expenses
-            .filter(e => e.group_id === gId && e.payer_id === user.id)
-            .reduce((sum, e) => sum + Number(e.amount), 0)
-
-          // Shares in group
-          // Note: an expense split represents what user owes to the payer.
-          // Wait, if U is the payer, other members' splits are owed to U.
-          // Let's compute group balance directly:
-          // User balance in group = (amount user paid in group) - (user's splits in group)
-          // Wait, we need to know what U owes other payers, and what other members owe U!
-          // Let's calculate:
-          // What U owes to others = sum of pending splits in group where expense.payer_id != U
-          const userOwesOthers = splits
-            .filter(s => s.expense?.group_id === gId && s.expense?.payer_id !== user.id)
-            .reduce((sum, s) => sum + Number(s.share), 0)
-
-          // What others owe U = sum of pending splits in group expenses created by U
-          // To calculate this, we look at group expenses where U is payer, and sum splits of other users (which are pending)
-          // Let's query pending splits for expenses where U is payer
-          // (Instead of querying everything, we can approximate or compute this cleanly by query)
-        })
-
-        // A simpler approach for group balances:
-        // Total money owed to U in groups = splits where expense.payer = U and split.user != U and status = pending
         const expenseIdsPaidByU = expenses.filter(e => e.payer_id === user.id).map(e => e.id)
         if (expenseIdsPaidByU.length > 0) {
           const { data: owedSplits, error: osError } = await supabase
@@ -191,8 +159,6 @@ export default function Home() {
           }
         }
 
-        // Total money U owes in groups = splits where split.user = U and status = pending
-        // (already fetched in `splits` variable)
         groupOwes = splits.reduce((sum, s) => sum + Number(s.share), 0)
       }
 
@@ -239,12 +205,10 @@ export default function Home() {
 
       setSuccess('Transaction added successfully!')
       setIsAddTxOpen(false)
-      // Reset form
       setTxAmount('')
       setTxDesc('')
       setTxType('lent')
       
-      // Refresh dashboard
       await fetchDashboardData()
     } catch (err) {
       console.error(err)
@@ -260,7 +224,6 @@ export default function Home() {
       setLoading(true)
       setError(null)
       
-      // Fetch friend's wallet details
       const { data: walletDetails, error: wError } = await supabase
         .from('wallets')
         .select('*')
@@ -288,7 +251,6 @@ export default function Home() {
       setSettlingDirect(true)
       setError(null)
 
-      // Update all transactions between user and friend to 'settled'
       const { error: sError } = await supabase
         .from('transactions')
         .update({ status: 'settled' })
@@ -320,7 +282,7 @@ export default function Home() {
         .from('transactions')
         .delete()
         .eq('id', txId)
-        .eq('user_id', user.id) // Only creator can delete
+        .eq('user_id', user.id)
 
       if (dError) throw dError
 
@@ -334,8 +296,15 @@ export default function Home() {
     }
   }
 
-  // Calculate Net
   const netBalance = owedToMe - iOwe
+
+  const filteredTransactions = recentTransactions.filter(tx => {
+    const friendName = tx.user_id === user.id ? tx.friend?.full_name : tx.creator?.full_name
+    return (
+      tx.description?.toLowerCase().includes(searchFilter.toLowerCase()) ||
+      friendName?.toLowerCase().includes(searchFilter.toLowerCase())
+    )
+  })
 
   return (
     <>
@@ -344,347 +313,372 @@ export default function Home() {
 
       {loading && <LoadingPulseOverlay />}
 
-      <div className="min-h-screen bg-black text-white px-4 py-8 pb-28 font-figtree">
-        <div className="max-w-7xl mx-auto">
-          {/* Header Greeting */}
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-accent/20 border border-accent/40 flex items-center justify-center text-2xl shadow-inner shadow-black/40">
-                {profile?.avatar_url || '👋'}
-              </div>
-              <div>
-                <p className="text-xs text-neutral-400 font-medium">Welcome back,</p>
-                <h2 className="text-xl font-bold text-white leading-tight">
-                  {profile?.full_name || 'User'}
-                </h2>
-              </div>
-            </div>
+      <div className="min-h-screen bg-bg-app text-text-primary px-4 pt-6 pb-28 font-figtree transition-colors duration-300">
+        <div className="max-w-md mx-auto space-y-6">
+          
+          {/* Header (Inspired by mockup) */}
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => navigate('/profile')}
+              className="w-10 h-10 rounded-full bg-accent/25 flex items-center justify-center text-xl shadow-inner border border-accent/30 hover:scale-105 active:scale-95 transition"
+            >
+              {profile?.avatar_url || '👤'}
+            </button>
+            <h1 className="text-lg font-extrabold text-text-primary text-center">Explore</h1>
             <button
               onClick={() => signOut()}
-              className="text-xs font-bold text-red-400/80 bg-red-500/10 border border-red-500/20 px-4 py-2 rounded-full hover:bg-red-500/20 transition cursor-pointer"
+              className="w-10 h-10 rounded-full bg-bg-card border border-border-primary text-text-secondary hover:text-red-400 flex items-center justify-center hover:scale-105 active:scale-95 transition cursor-pointer"
             >
-              Logout
+              <Menu className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Responsive Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+          {/* Premium Search bar (Mockup styled) */}
+          <div className="relative w-full">
+            <input
+              type="text"
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              placeholder="Search transactions, friends..."
+              className="w-full bg-bg-card border border-border-primary/80 focus:border-accent text-text-primary pl-10 pr-4 py-3 rounded-2xl text-sm outline-none shadow-sm transition"
+            />
+            <Search className="absolute left-3.5 top-3.5 text-text-secondary w-3.5 h-3.5" />
+          </div>
+
+          {/* Net Balance Premium Card */}
+          <div className="relative overflow-hidden bg-bg-card border border-border-primary rounded-[2rem] p-5 shadow-sm">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-accent/10 rounded-full blur-3xl pointer-events-none"></div>
             
-            {/* Left/Middle side: Balance Summary Card & Recent Transactions */}
-            <div className="lg:col-span-2 space-y-6">
-              
-              {/* Card Net Balance Summary */}
-              <div className="relative overflow-hidden bg-neutral-900/40 border border-neutral-800/80 rounded-[2rem] p-6 shadow-2xl backdrop-blur-xl">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-accent/10 rounded-full blur-3xl pointer-events-none"></div>
-                
-                <p className="text-xs font-bold text-neutral-400 uppercase tracking-wider mb-1">Net Balance</p>
-                <h1 className={`text-4xl font-extrabold tracking-tight grad leading-tight ${netBalance >= 0 ? 'text-white' : 'text-red-400'}`}>
-                  Rs. {netBalance.toLocaleString()}
-                </h1>
+            <p className="text-xs font-semibold text-text-secondary mb-1 text-center">Total Balance</p>
+            <h1 className="text-3xl font-black text-center grad mb-5">
+              Rs. {netBalance.toLocaleString()}
+            </h1>
 
-                <div className="grid grid-cols-2 gap-4 mt-6 pt-6 border-t border-neutral-800/80">
-                  <div className="flex items-start gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center justify-center text-green-400">
-                      <ArrowUpRight className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Owes Me</p>
-                      <p className="text-base font-extrabold text-green-400">Rs. {owedToMe.toLocaleString()}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400">
-                      <ArrowDownLeft className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">I Owe</p>
-                      <p className="text-base font-extrabold text-red-400">Rs. {iOwe.toLocaleString()}</p>
-                    </div>
-                  </div>
+            <div className="grid grid-cols-2 gap-3 pt-4 border-t border-border-inner">
+              <div className="flex items-center gap-2 bg-bg-card-inner/60 p-2.5 rounded-2xl border border-border-inner">
+                <div className="w-8 h-8 rounded-xl bg-green-500/10 flex items-center justify-center text-green-400 shrink-0">
+                  <ArrowUpRight className="w-4 h-4" />
+                </div>
+                <div className="overflow-hidden">
+                  <p className="text-xs font-semibold text-text-secondary">Owed to me</p>
+                  <p className="text-xs font-black text-green-400 truncate">Rs. {owedToMe.toLocaleString()}</p>
                 </div>
               </div>
 
-              {/* Recent Transactions List */}
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-4 ml-1">
-                  <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Recent Transactions</h3>
+              <div className="flex items-center gap-2 bg-bg-card-inner/60 p-2.5 rounded-2xl border border-border-inner">
+                <div className="w-8 h-8 rounded-xl bg-red-500/10 flex items-center justify-center text-red-400 shrink-0">
+                  <ArrowDownLeft className="w-4 h-4" />
                 </div>
-
-                <div className="flex flex-col gap-3">
-                  {recentTransactions.length === 0 ? (
-                    <div className="bg-neutral-900/20 border border-dashed border-neutral-800 rounded-3xl p-8 flex flex-col items-center justify-center text-center">
-                      <FileText className="w-8 h-8 text-neutral-600 mb-2" />
-                      <p className="text-xs font-medium text-neutral-500">No transactions recorded yet</p>
-                      <button
-                        onClick={() => setIsAddTxOpen(true)}
-                        className="mt-3 text-xs font-bold text-accent hover:underline bg-transparent border-0 cursor-pointer"
-                      >
-                        Create one now
-                      </button>
-                    </div>
-                  ) : (
-                    recentTransactions.slice(0, 8).map(tx => {
-                      const isCreator = tx.user_id === user.id
-                      const otherParty = isCreator ? tx.friend : tx.creator
-                      
-                      let displayType = ''
-                      let amountColor = ''
-                      let prefix = ''
-
-                      if (isCreator) {
-                        if (tx.type === 'lent') {
-                          displayType = 'Lent'
-                          amountColor = 'text-green-400'
-                          prefix = '+'
-                        } else if (tx.type === 'borrowed') {
-                          displayType = 'Borrowed'
-                          amountColor = 'text-red-400'
-                          prefix = '-'
-                        } else if (tx.type === 'paid') {
-                          displayType = 'Paid'
-                          amountColor = 'text-green-400'
-                          prefix = '+'
-                        } else if (tx.type === 'received') {
-                          displayType = 'Received'
-                          amountColor = 'text-red-400'
-                          prefix = '-'
-                        }
-                      } else {
-                        if (tx.type === 'lent') {
-                          displayType = 'Borrowed'
-                          amountColor = 'text-red-400'
-                          prefix = '-'
-                        } else if (tx.type === 'borrowed') {
-                          displayType = 'Lent'
-                          amountColor = 'text-green-400'
-                          prefix = '+'
-                        } else if (tx.type === 'paid') {
-                          displayType = 'Received'
-                          amountColor = 'text-red-400'
-                          prefix = '-'
-                        } else if (tx.type === 'received') {
-                          displayType = 'Paid'
-                          amountColor = 'text-green-400'
-                          prefix = '+'
-                        }
-                      }
-
-                      return (
-                        <div
-                          key={tx.id}
-                          className="flex items-center justify-between p-4 bg-neutral-900/40 border border-neutral-800/80 rounded-2xl shadow-sm hover:border-neutral-700/60 transition"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-neutral-800 flex items-center justify-center text-lg">
-                              {otherParty?.avatar_url || '👤'}
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className="text-[13px] font-bold text-white leading-tight">
-                                  {otherParty?.full_name}
-                                </p>
-                                <span className={`text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded-full ${tx.status === 'settled' ? 'bg-neutral-800 text-neutral-400' : 'bg-accent/15 text-accent'}`}>
-                                  {tx.status}
-                                </span>
-                              </div>
-                              <p className="text-[10px] text-neutral-400 mt-0.5">
-                                {displayType} • {tx.description}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-3">
-                            <div className="text-right">
-                              <p className={`text-[13px] font-extrabold ${amountColor}`}>
-                                {prefix}Rs. {Number(tx.amount).toLocaleString()}
-                              </p>
-                              <p className="text-[9px] text-neutral-500 flex items-center gap-1 justify-end mt-0.5">
-                                <Calendar className="w-2.5 h-2.5" />
-                                {new Date(tx.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                              </p>
-                            </div>
-
-                            {isCreator && (
-                              <button
-                                onClick={() => handleDeleteTx(tx.id)}
-                                className="p-1 text-neutral-600 hover:text-red-400 transition cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })
-                  )}
+                <div className="overflow-hidden">
+                  <p className="text-xs font-semibold text-text-secondary">I owe</p>
+                  <p className="text-xs font-black text-red-400 truncate">Rs. {iOwe.toLocaleString()}</p>
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Right side: Quick Actions & Friends Balances */}
-            <div className="space-y-6">
+          {/* "Favorit" Grid (Inspired by the Left Mockup) */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-extrabold text-text-primary ml-1">Favorit</h3>
+            <div className="grid grid-cols-3 gap-3">
               
-              {/* Quick Actions Grid */}
-              <div className="bg-neutral-900/15 border border-neutral-800/60 rounded-3xl p-5">
-                <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-4">Quick Actions</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => setIsAddTxOpen(true)}
-                    className="flex flex-col items-center justify-center p-3.5 bg-neutral-900/40 border border-neutral-800/80 rounded-2xl gap-2 hover:border-accent/30 transition cursor-pointer"
-                  >
-                    <div className="w-9 h-9 rounded-full bg-accent/15 flex items-center justify-center text-accent flex-shrink-0">
-                      <Plus className="w-4 h-4" />
-                    </div>
-                    <span className="text-[10px] text-neutral-300 font-bold leading-tight text-center">Add Direct</span>
-                  </button>
-
-                  <button
-                    onClick={() => navigate('/friends')}
-                    className="flex flex-col items-center justify-center p-3.5 bg-neutral-900/40 border border-neutral-800/80 rounded-2xl gap-2 hover:border-accent/30 transition cursor-pointer"
-                  >
-                    <div className="w-9 h-9 rounded-full bg-accent/15 flex items-center justify-center text-accent flex-shrink-0">
-                      <UserPlus className="w-4 h-4" />
-                    </div>
-                    <span className="text-[10px] text-neutral-300 font-bold leading-tight text-center">Add Friend</span>
-                  </button>
-
-                  <button
-                    onClick={() => navigate('/groups')}
-                    className="flex flex-col items-center justify-center p-3.5 bg-neutral-900/40 border border-neutral-800/80 rounded-2xl gap-2 hover:border-accent/30 transition cursor-pointer"
-                  >
-                    <div className="w-9 h-9 rounded-full bg-accent/15 flex items-center justify-center text-accent flex-shrink-0">
-                      <Users className="w-4 h-4" />
-                    </div>
-                    <span className="text-[10px] text-neutral-300 font-bold leading-tight text-center">Split Group</span>
-                  </button>
-
-                  <button
-                    onClick={() => navigate('/spending')}
-                    className="flex flex-col items-center justify-center p-3.5 bg-neutral-900/40 border border-neutral-800/80 rounded-2xl gap-2 hover:border-accent/30 transition cursor-pointer"
-                  >
-                    <div className="w-9 h-9 rounded-full bg-accent/15 flex items-center justify-center text-accent flex-shrink-0">
-                      <TrendingDown className="w-4 h-4" />
-                    </div>
-                    <span className="text-[10px] text-neutral-300 font-bold leading-tight text-center">Track Spend</span>
-                  </button>
+              <button
+                onClick={() => setIsAddTxOpen(true)}
+                className="flex flex-col items-center justify-center p-4 bg-bg-card border border-border-primary hover:border-accent/30 rounded-2xl gap-2 active:scale-95 transition cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 shadow-sm border border-indigo-500/20">
+                  <Send className="w-4 h-4" />
                 </div>
-              </div>
+                <span className="text-xs text-text-primary font-bold tracking-tight text-center">Add Direct</span>
+              </button>
 
-              {/* Friends Balance Settlement Quick section */}
-              {friends.length > 0 && (
-                <div className="bg-neutral-900/15 border border-neutral-800/60 rounded-3xl p-5">
-                  <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-widest mb-4">Direct Balances</h3>
-                  <div className="grid grid-cols-1 gap-3">
-                    {friends.map(f => {
-                      const fTxs = recentTransactions.filter(t => t.status === 'pending' && (t.user_id === f.id || t.friend_id === f.id))
-                      let fBal = 0
-                      fTxs.forEach(t => {
-                        if (t.user_id === user.id) {
-                          fBal += (t.type === 'lent' || t.type === 'paid') ? Number(t.amount) : -Number(t.amount)
-                        } else {
-                          fBal += (t.type === 'borrowed' || t.type === 'received') ? Number(t.amount) : -Number(t.amount)
-                        }
-                      })
-
-                      return (
-                        <div
-                          key={f.id}
-                          className="flex items-center justify-between p-3.5 bg-neutral-900/30 border border-neutral-800/60 rounded-2xl"
-                        >
-                          <div className="flex items-center gap-2.5 overflow-hidden">
-                            <span className="text-2xl">{f.avatar_url || '👤'}</span>
-                            <div className="overflow-hidden">
-                              <p className="text-xs font-bold truncate text-white">{f.full_name}</p>
-                              <p className="text-[10px] text-neutral-400 truncate">@{f.username}</p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-3 flex-shrink-0">
-                            <div className="text-right">
-                              {fBal === 0 ? (
-                                <span className="text-[10px] font-bold text-neutral-500">Setted</span>
-                              ) : fBal > 0 ? (
-                                <div className="text-[10px] text-green-400 font-bold">
-                                  Owes: <span className="text-xs">Rs. {fBal}</span>
-                                </div>
-                              ) : (
-                                <div className="text-[10px] text-red-400 font-bold">
-                                  Owe: <span className="text-xs">Rs. {Math.abs(fBal)}</span>
-                                </div>
-                              )}
-                            </div>
-
-                            {fBal !== 0 && (
-                              <button
-                                onClick={() => openPaymentModal(f)}
-                                className="bg-accent/15 text-accent px-3 py-1.5 rounded-xl text-[10px] font-bold hover:bg-accent/25 transition cursor-pointer"
-                              >
-                                Settle
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
+              <button
+                onClick={() => navigate('/friends')}
+                className="flex flex-col items-center justify-center p-4 bg-bg-card border border-border-primary hover:border-accent/30 rounded-2xl gap-2 active:scale-95 transition cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-2xl bg-[#7c6fd6]/15 flex items-center justify-center text-accent shadow-sm border border-accent/20">
+                  <UserPlus className="w-4 h-4" />
                 </div>
-              )}
+                <span className="text-xs text-text-primary font-bold tracking-tight text-center">Add Friend</span>
+              </button>
+
+              <button
+                onClick={() => navigate('/groups')}
+                className="flex flex-col items-center justify-center p-4 bg-bg-card border border-border-primary hover:border-accent/30 rounded-2xl gap-2 active:scale-95 transition cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-400 shadow-sm border border-purple-500/20">
+                  <Layers className="w-4 h-4" />
+                </div>
+                <span className="text-xs text-text-primary font-bold tracking-tight text-center">Split Group</span>
+              </button>
 
             </div>
           </div>
+
+          {/* "Payment" / Trackers Section (Inspired by Left Mockup) */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-extrabold text-text-primary ml-1">Payment & Track</h3>
+            <div className="grid grid-cols-2 gap-3">
+              
+              <button
+                onClick={() => navigate('/spending')}
+                className="flex items-center gap-3 p-3 bg-bg-card border border-border-primary rounded-2xl hover:border-accent/30 transition text-left cursor-pointer active:scale-98"
+              >
+                <div className="w-9 h-9 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-400 border border-orange-500/25">
+                  <RefreshCw className="w-4.5 h-4.5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-text-primary">Track Spent</h4>
+                  <p className="text-xs text-text-secondary mt-0.5">Personal Expenses</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => navigate('/profile')}
+                className="flex items-center gap-3 p-3 bg-bg-card border border-border-primary rounded-2xl hover:border-accent/30 transition text-left cursor-pointer active:scale-98"
+              >
+                <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400 border border-blue-500/25">
+                  <Wallet className="w-4.5 h-4.5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-text-primary">Wallets</h4>
+                  <p className="text-xs text-text-secondary mt-0.5">Manage accounts</p>
+                </div>
+              </button>
+
+            </div>
+          </div>
+
+          {/* Recent Transactions list */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between ml-1">
+              <h3 className="text-sm font-extrabold text-text-primary">Recent Transactions</h3>
+              {filteredTransactions.length > 0 && (
+                <button
+                  onClick={() => setSearchFilter('')}
+                  className="text-xs font-bold text-accent hover:underline"
+                >
+                  Clear filter
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-3">
+              {filteredTransactions.length === 0 ? (
+                <div className="bg-bg-card border border-dashed border-border-primary rounded-3xl p-8 flex flex-col items-center justify-center text-center">
+                  <FileText className="w-8 h-8 text-text-secondary/60 mb-2" />
+                  <p className="text-xs font-medium text-text-secondary">No transactions found</p>
+                </div>
+              ) : (
+                filteredTransactions.slice(0, 5).map(tx => {
+                  const isCreator = tx.user_id === user.id
+                  const otherParty = isCreator ? tx.friend : tx.creator
+                  
+                  let displayType = ''
+                  let amountColor = ''
+                  let prefix = ''
+
+                  if (isCreator) {
+                    if (tx.type === 'lent') {
+                      displayType = 'Lent'
+                      amountColor = 'text-green-400'
+                      prefix = '+'
+                    } else if (tx.type === 'borrowed') {
+                      displayType = 'Borrowed'
+                      amountColor = 'text-red-400'
+                      prefix = '-'
+                    } else if (tx.type === 'paid') {
+                      displayType = 'Paid'
+                      amountColor = 'text-green-400'
+                      prefix = '+'
+                    } else if (tx.type === 'received') {
+                      displayType = 'Received'
+                      amountColor = 'text-red-400'
+                      prefix = '-'
+                    }
+                  } else {
+                    if (tx.type === 'lent') {
+                      displayType = 'Borrowed'
+                      amountColor = 'text-red-400'
+                      prefix = '-'
+                    } else if (tx.type === 'borrowed') {
+                      displayType = 'Lent'
+                      amountColor = 'text-green-400'
+                      prefix = '+'
+                    } else if (tx.type === 'paid') {
+                      displayType = 'Received'
+                      amountColor = 'text-red-400'
+                      prefix = '-'
+                    } else if (tx.type === 'received') {
+                      displayType = 'Paid'
+                      amountColor = 'text-green-400'
+                      prefix = '+'
+                    }
+                  }
+
+                  return (
+                    <div
+                      key={tx.id}
+                      className="flex items-center justify-between p-3.5 bg-bg-card border border-border-primary rounded-2xl shadow-sm hover:border-accent/30 transition-all duration-200"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-bg-card-inner flex items-center justify-center text-lg shadow-sm border border-border-primary/50">
+                          {otherParty?.avatar_url || '👤'}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="text-[12px] font-bold text-text-primary leading-tight">
+                              {otherParty?.full_name}
+                            </p>
+                            <span className={`text-xs font-bold capitalize px-1.5 py-0.5 rounded-full ${tx.status === 'settled' ? 'bg-bg-card-inner text-text-secondary' : 'bg-accent/15 text-accent'}`}>
+                              {tx.status}
+                            </span>
+                          </div>
+                          <p className="text-xs text-text-secondary mt-0.5">
+                            {displayType} • {tx.description}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className={`text-[12px] font-extrabold ${amountColor}`}>
+                            {prefix}Rs. {Number(tx.amount).toLocaleString()}
+                          </p>
+                          <p className="text-xs text-text-secondary flex items-center gap-1 justify-end mt-0.5 font-semibold">
+                            <Calendar className="w-2.5 h-2.5" />
+                            {new Date(tx.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                          </p>
+                        </div>
+
+                        {isCreator && (
+                          <button
+                            onClick={() => handleDeleteTx(tx.id)}
+                            className="p-1 text-text-secondary/60 hover:text-red-400 transition cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Quick settlement balance drawer (Direct balances list) */}
+          {friends.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-extrabold text-text-primary ml-1">Direct Balances</h3>
+              <div className="grid grid-cols-1 gap-2.5">
+                {friends.slice(0, 3).map(f => {
+                  const fTxs = recentTransactions.filter(t => t.status === 'pending' && (t.user_id === f.id || t.friend_id === f.id))
+                  let fBal = 0
+                  fTxs.forEach(t => {
+                    if (t.user_id === user.id) {
+                      fBal += (t.type === 'lent' || t.type === 'paid') ? Number(t.amount) : -Number(t.amount)
+                    } else {
+                      fBal += (t.type === 'borrowed' || t.type === 'received') ? Number(t.amount) : -Number(t.amount)
+                    }
+                  })
+
+                  return (
+                    <div
+                      key={f.id}
+                      className="flex items-center justify-between p-3 bg-bg-card-inner border border-border-primary rounded-2xl"
+                    >
+                      <div className="flex items-center gap-2.5 overflow-hidden">
+                        <span className="text-2xl shrink-0">{f.avatar_url || '👤'}</span>
+                        <div className="overflow-hidden">
+                          <p className="text-[11px] font-bold truncate text-text-primary">{f.full_name}</p>
+                          <p className="text-xs text-text-secondary truncate">@{f.username}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <div className="text-right">
+                          {fBal === 0 ? (
+                            <span className="text-xs font-bold text-text-secondary">Settled</span>
+                          ) : fBal > 0 ? (
+                            <div className="text-xs text-green-400 font-bold">
+                              Owes: Rs. {fBal}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-red-400 font-bold">
+                              Owe: Rs. {Math.abs(fBal)}
+                            </div>
+                          )}
+                        </div>
+
+                        {fBal !== 0 && (
+                          <button
+                            onClick={() => openPaymentModal(f)}
+                            className="bg-accent/15 text-accent px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-accent/25 transition cursor-pointer"
+                          >
+                            Settle
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
 
       {/* Add Direct Transaction Modal */}
       {isAddTxOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-[2rem] p-6 shadow-2xl">
-            <h2 className="text-xl font-black text-white grad mb-1">Add Direct Transaction</h2>
-            <p className="text-xs text-neutral-400 mb-5">Record a direct transaction with a friend.</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-bg-card border border-border-primary rounded-[2rem] p-6 shadow-2xl">
+            <h2 className="text-xl font-black text-text-primary grad mb-1">Add Direct Transaction</h2>
+            <p className="text-xs text-text-secondary mb-5">Record a direct transaction with a friend.</p>
 
             <form onSubmit={handleAddTx} className="space-y-4">
               <div>
-                <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-text-secondary mb-2">
                   Select Friend
                 </label>
                 <select
                   value={txFriendId}
                   onChange={(e) => setTxFriendId(e.target.value)}
-                  className="w-full bg-black border border-neutral-850 focus:border-accent text-white px-3 py-3 rounded-xl text-sm outline-none cursor-pointer"
+                  className="w-full bg-bg-input border border-border-input focus:border-accent text-text-primary px-3 py-3 rounded-xl text-sm outline-none cursor-pointer"
                   required
                 >
                   <option value="" disabled>Choose a friend</option>
                   {friends.map(f => (
-                    <option key={f.id} value={f.id}>
+                    <option key={f.id} value={f.id} className="bg-bg-input text-text-primary">
                       {f.full_name} (@{f.username})
                     </option>
                   ))}
                 </select>
                 {friends.length === 0 && (
-                  <p className="text-[10px] text-red-400 mt-1 ml-1">You must add friends first to make transactions!</p>
+                  <p className="text-xs text-red-400 mt-1 ml-1">You must add friends first to make transactions!</p>
                 )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-text-secondary mb-2">
                     Transaction Type
                   </label>
                   <select
                     value={txType}
                     onChange={(e) => setTxType(e.target.value)}
-                    className="w-full bg-black border border-neutral-850 focus:border-accent text-white px-3 py-3 rounded-xl text-sm outline-none cursor-pointer"
+                    className="w-full bg-bg-input border border-border-input focus:border-accent text-text-primary px-3 py-3 rounded-xl text-sm outline-none cursor-pointer"
                   >
-                    <option value="lent">Lent (I lent money)</option>
-                    <option value="borrowed">Borrowed (I borrowed money)</option>
-                    <option value="paid">Paid (I paid friend)</option>
-                    <option value="received">Received (Friend paid me)</option>
+                    <option value="lent" className="bg-bg-input text-text-primary">Lent (I lent money)</option>
+                    <option value="borrowed" className="bg-bg-input text-text-primary">Borrowed (I borrowed money)</option>
+                    <option value="paid" className="bg-bg-input text-text-primary">Paid (I paid friend)</option>
+                    <option value="received" className="bg-bg-input text-text-primary">Received (Friend paid me)</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-text-secondary mb-2">
                     Amount (Rs.)
                   </label>
                   <input
@@ -693,14 +687,14 @@ export default function Home() {
                     onChange={(e) => setTxAmount(e.target.value)}
                     placeholder="500"
                     min="1"
-                    className="w-full bg-black border border-neutral-850 focus:border-accent text-white px-4 py-3 rounded-xl text-sm outline-none"
+                    className="w-full bg-bg-input border border-border-input focus:border-accent text-text-primary px-4 py-3 rounded-xl text-sm outline-none"
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-text-secondary mb-2">
                   Description
                 </label>
                 <input
@@ -708,20 +702,20 @@ export default function Home() {
                   value={txDesc}
                   onChange={(e) => setTxDesc(e.target.value)}
                   placeholder="Dinner, cab fare, snacks, etc."
-                  className="w-full bg-black border border-neutral-850 focus:border-accent text-white px-4 py-3 rounded-xl text-sm outline-none"
+                  className="w-full bg-bg-input border border-border-input focus:border-accent text-text-primary px-4 py-3 rounded-xl text-sm outline-none"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-text-secondary mb-2">
                   Date
                 </label>
                 <input
                   type="date"
                   value={txDate}
                   onChange={(e) => setTxDate(e.target.value)}
-                  className="w-full bg-black border border-neutral-850 focus:border-accent text-white px-4 py-3 rounded-xl text-sm outline-none"
+                  className="w-full bg-bg-input border border-border-input focus:border-accent text-text-primary px-4 py-3 rounded-xl text-sm outline-none"
                   required
                 />
               </div>
@@ -730,7 +724,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setIsAddTxOpen(false)}
-                  className="flex-1 bg-neutral-800 text-neutral-300 py-3 rounded-xl text-xs font-bold hover:bg-neutral-750 transition cursor-pointer"
+                  className="flex-1 bg-bg-card-inner border border-border-primary text-text-secondary py-3 rounded-xl text-xs font-bold hover:text-text-primary transition cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -749,91 +743,91 @@ export default function Home() {
 
       {/* Payment Details / Settle Modal */}
       {isPayModalOpen && payFriend && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-[2rem] p-6 shadow-2xl">
-            <h2 className="text-xl font-black text-white grad mb-1">Payment Details</h2>
-            <p className="text-xs text-neutral-400 mb-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-bg-card border border-border-primary rounded-[2rem] p-6 shadow-2xl">
+            <h2 className="text-xl font-black text-text-primary grad mb-1">Payment Details</h2>
+            <p className="text-xs text-text-secondary mb-5">
               Send payments directly to {payFriend.full_name} using their saved methods below, then mark the balance as settled.
             </p>
 
-            <div className="space-y-4 mb-6 bg-black/30 p-4 rounded-2xl border border-neutral-850">
-              <div className="flex items-center gap-3 pb-3 border-b border-neutral-850">
+            <div className="space-y-4 mb-6 bg-bg-card-inner p-4 rounded-2xl border border-border-primary">
+              <div className="flex items-center gap-3 pb-3 border-b border-border-primary">
                 <span className="text-3xl">{payFriend.avatar_url || '👤'}</span>
                 <div>
-                  <p className="text-xs font-bold text-white">{payFriend.full_name}</p>
-                  <p className="text-[10px] text-accent font-semibold">@{payFriend.username}</p>
+                  <p className="text-xs font-bold text-text-primary">{payFriend.full_name}</p>
+                  <p className="text-xs text-accent font-semibold">@{payFriend.username}</p>
                 </div>
               </div>
 
               <div className="space-y-3 pt-1">
                 {(!payWallet || (!payWallet.easypaisa_number && !payWallet.jazzcash_number && !payWallet.nayapay_number && !payWallet.sadapay_number && !payWallet.bank_account_number)) ? (
-                  <p className="text-xs text-neutral-500 italic py-2 text-center">
+                  <p className="text-xs text-text-secondary italic py-2 text-center">
                     No payment methods configured by this user.
                   </p>
                 ) : (
                   <>
                     {payWallet.easypaisa_number && (
-                      <div className="flex justify-between items-center bg-black/20 p-2.5 rounded-xl border border-neutral-850/40">
+                      <div className="flex justify-between items-center bg-bg-card p-2.5 rounded-xl border border-border-inner">
                         <div>
-                          <p className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">EasyPaisa</p>
-                          <p className="text-xs font-semibold text-neutral-200">{payWallet.easypaisa_number}</p>
+                          <p className="text-xs font-semibold text-text-secondary">EasyPaisa</p>
+                          <p className="text-xs font-semibold text-text-primary">{payWallet.easypaisa_number}</p>
                         </div>
                         <span className="text-lg">🟢</span>
                       </div>
                     )}
 
                     {payWallet.jazzcash_number && (
-                      <div className="flex justify-between items-center bg-black/20 p-2.5 rounded-xl border border-neutral-850/40">
+                      <div className="flex justify-between items-center bg-bg-card p-2.5 rounded-xl border border-border-inner">
                         <div>
-                          <p className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">JazzCash</p>
-                          <p className="text-xs font-semibold text-neutral-200">{payWallet.jazzcash_number}</p>
+                          <p className="text-xs font-semibold text-text-secondary">JazzCash</p>
+                          <p className="text-xs font-semibold text-text-primary">{payWallet.jazzcash_number}</p>
                         </div>
                         <span className="text-lg">🔴</span>
                       </div>
                     )}
 
                     {payWallet.nayapay_number && (
-                      <div className="flex justify-between items-center bg-black/20 p-2.5 rounded-xl border border-neutral-850/40">
+                      <div className="flex justify-between items-center bg-bg-card p-2.5 rounded-xl border border-border-inner">
                         <div>
-                          <p className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">NayaPay</p>
-                          <p className="text-xs font-semibold text-neutral-200">{payWallet.nayapay_number}</p>
+                          <p className="text-xs font-semibold text-text-secondary">NayaPay</p>
+                          <p className="text-xs font-semibold text-text-primary">{payWallet.nayapay_number}</p>
                         </div>
                         <span className="text-lg">🍊</span>
                       </div>
                     )}
 
                     {payWallet.sadapay_number && (
-                      <div className="flex justify-between items-center bg-black/20 p-2.5 rounded-xl border border-neutral-850/40">
+                      <div className="flex justify-between items-center bg-bg-card p-2.5 rounded-xl border border-border-inner">
                         <div>
-                          <p className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">SadaPay</p>
-                          <p className="text-xs font-semibold text-neutral-200">{payWallet.sadapay_number}</p>
+                          <p className="text-xs font-semibold text-text-secondary">SadaPay</p>
+                          <p className="text-xs font-semibold text-text-primary">{payWallet.sadapay_number}</p>
                         </div>
                         <span className="text-lg">🟢</span>
                       </div>
                     )}
 
                     {payWallet.bank_account_number && (
-                      <div className="border-t border-neutral-850/65 pt-2 mt-2">
-                        <p className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider mb-2">Bank Transfer Details</p>
-                        <div className="bg-black/20 p-3 rounded-xl border border-neutral-850/40 space-y-1.5">
+                      <div className="border-t border-border-inner pt-2 mt-2">
+                        <p className="text-xs font-bold text-text-secondary mb-2">Bank Transfer Details</p>
+                        <div className="bg-bg-card p-3 rounded-xl border border-border-inner space-y-1.5">
                           {payWallet.bank_name && (
                             <div>
-                              <span className="text-[9px] text-neutral-500 font-bold">Bank Name:</span>{' '}
-                              <span className="text-xs text-neutral-200 font-semibold">{payWallet.bank_name}</span>
+                              <span className="text-xs text-text-secondary font-semibold">Bank Name:</span>{' '}
+                              <span className="text-xs text-text-primary font-semibold">{payWallet.bank_name}</span>
                             </div>
                           )}
                           <div>
-                            <span className="text-[9px] text-neutral-500 font-bold">Account Title:</span>{' '}
-                            <span className="text-xs text-neutral-200 font-semibold">{payWallet.account_title || 'N/A'}</span>
+                            <span className="text-xs text-text-secondary font-semibold">Account Title:</span>{' '}
+                            <span className="text-xs text-text-primary font-semibold">{payWallet.account_title || 'N/A'}</span>
                           </div>
                           <div>
-                            <span className="text-[9px] text-neutral-500 font-bold">Account Number:</span>{' '}
-                            <span className="text-xs text-neutral-200 font-semibold">{payWallet.bank_account_number}</span>
+                            <span className="text-xs text-text-secondary font-semibold">Account Number:</span>{' '}
+                            <span className="text-xs text-text-primary font-semibold">{payWallet.bank_account_number}</span>
                           </div>
                           {payWallet.iban && (
                             <div>
-                              <span className="text-[9px] text-neutral-500 font-bold">IBAN:</span>{' '}
-                              <span className="text-xs text-neutral-200 font-semibold">{payWallet.iban}</span>
+                              <span className="text-xs text-text-secondary font-semibold">IBAN:</span>{' '}
+                              <span className="text-xs text-text-primary font-semibold">{payWallet.iban}</span>
                             </div>
                           )}
                         </div>
@@ -852,7 +846,7 @@ export default function Home() {
                   setPayFriend(null)
                   setPayWallet(null)
                 }}
-                className="flex-1 bg-neutral-800 text-neutral-300 py-3 rounded-xl text-xs font-bold hover:bg-neutral-750 transition cursor-pointer"
+                className="flex-1 bg-bg-card-inner border border-border-primary text-text-secondary py-3 rounded-xl text-xs font-bold hover:text-text-primary transition cursor-pointer"
               >
                 Close
               </button>

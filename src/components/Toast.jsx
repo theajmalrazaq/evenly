@@ -66,7 +66,7 @@ const Toast = ({
       role="alert"
     >
       <div
-        className={`flex items-center gap-3 p-4 rounded-3xl border border-accent/20 shadow-lg backdrop-blur-md bg-black/80 transition-all duration-300 ${accent}`}
+        className={`flex items-center gap-3 p-4 rounded-3xl border border-border-primary shadow-lg backdrop-blur-md bg-bg-card/95 transition-all duration-300`}
       >
         <div
           className={`inline-flex items-center justify-center shrink-0 w-8 h-8 rounded-full ${accent}`}
@@ -74,10 +74,10 @@ const Toast = ({
           {icon || ICONS[type]}
           <span className="sr-only">Toast icon</span>
         </div>
-        <div className="flex-1 text-sm font-normal text-white/90">{message}</div>
+        <div className="flex-1 text-sm font-normal text-text-primary">{message}</div>
         <button
           type="button"
-          className="ml-auto bg-transparent text-white/40 hover:text-white rounded-full focus:ring-2 focus:ring-accent/30 p-1.5 inline-flex items-center justify-center h-8 w-8"
+          className="ml-auto bg-transparent text-text-secondary hover:text-text-primary rounded-full focus:ring-2 focus:ring-accent/30 p-1.5 inline-flex items-center justify-center h-8 w-8 cursor-pointer"
           aria-label="Close"
           onClick={onClose}
         >
